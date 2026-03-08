@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Plan</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header id="header">
+      <button id="btn-prev" class="nav-btn" title="Previous day">&#8249;</button>
+      <div id="date-display">
+        <h1 id="date-title"></h1>
+        <div id="day-row">
+          <span class="day-letter" data-offset="0">M</span>
+          <span class="day-letter" data-offset="1">T</span>
+          <span class="day-letter" data-offset="2">W</span>
+          <span class="day-letter" data-offset="3">T</span>
+          <span class="day-letter" data-offset="4">F</span>
+          <span class="day-letter" data-offset="5">S</span>
+          <span class="day-letter" data-offset="6">S</span>
+        </div>
+      </div>
+      <button id="btn-next" class="nav-btn" title="Next day">&#8250;</button>
+      <button id="btn-auth" class="auth-btn" title="Connect Google Calendar">
+        <span id="auth-icon">&#128197;</span>
+        <span id="auth-label">Connect Calendar</span>
+      </button>
+    </header>
+
+    <!-- Setup banner (shown when no client ID configured) -->
+    <div id="setup-banner" class="hidden">
+      <strong>Setup required:</strong> Open <code>app.js</code> and set
+      <code>GOOGLE_CLIENT_ID</code> to your Google OAuth Client ID.
+      <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">
+        Google Cloud Console
+      </a>
+    </div>
+
+    <!-- Main layout -->
+    <div id="main">
+
+      <!-- Sidebar: task lists -->
+      <aside id="sidebar">
+
+        <div class="goals-box" id="work-box">
+          <div class="goals-header">
+            <span class="goals-icon work-icon">&#128188;</span>
+            <span class="goals-label">Work</span>
+          </div>
+          <ol class="task-list" id="work-tasks"></ol>
+        </div>
+
+        <div class="goals-box" id="life-box">
+          <div class="goals-header">
+            <span class="goals-icon life-icon">&#10084;</span>
+            <span class="goals-label">Life</span>
+          </div>
+          <ol class="task-list" id="life-tasks"></ol>
+        </div>
+
+      </aside>
+
+      <!-- Timeline -->
+      <div id="timeline-wrapper">
+        <div id="timeline-scroll">
+          <div id="timeline">
+            <!-- Slot rows injected by JS -->
+            <div id="slots-layer"></div>
+            <!-- Event cards positioned absolutely -->
+            <div id="events-layer"></div>
+            <!-- Drag ghost line -->
+            <div id="drag-indicator" class="hidden"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /#main -->
+  </div><!-- /#app -->
+
+  <!-- Event Modal -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal">
+      <h3 id="modal-heading">Add Event</h3>
+      <div class="modal-field">
+        <label for="modal-title-input">Title</label>
+        <input id="modal-title-input" type="text" placeholder="Event title" autocomplete="off" />
+      </div>
+      <div class="modal-row">
+        <div class="modal-field">
+          <label for="modal-start">Start</label>
+          <input id="modal-start" type="time" step="1800" />
+        </div>
+        <div class="modal-field">
+          <label for="modal-end">End</label>
+          <input id="modal-end" type="time" step="1800" />
+        </div>
+      </div>
+      <div class="modal-field">
+        <label for="modal-color">Color</label>
+        <div id="color-picker">
+          <button class="color-swatch" data-color="blue"   style="background:#4a90d9" title="Blue"></button>
+          <button class="color-swatch" data-color="green"  style="background:#5aaa6e" title="Green"></button>
+          <button class="color-swatch" data-color="orange" style="background:#e8846a" title="Orange"></button>
+          <button class="color-swatch" data-color="purple" style="background:#9b7fd4" title="Purple"></button>
+          <button class="color-swatch" data-color="teal"   style="background:#4ab4b4" title="Teal"></button>
+        </div>
+      </div>
+      <div id="modal-actions">
+        <button id="modal-save" class="btn-primary">Save</button>
+        <button id="modal-delete" class="btn-danger hidden">Delete</button>
+        <button id="modal-cancel" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google APIs -->
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="app.js"></script>
+</body>
+</html>
