@@ -11,8 +11,8 @@ A web app for daily planning with a vertical timeline calendar and Work/Life tas
 - **Drag events** — reposition calendar events by dragging them to a new slot
 - **Click to add** — click any empty slot to create a new event
 - **Date navigation** — previous/next buttons and day-of-week quick-jump
-- **Tasks persist per day** — stored in `localStorage`, so each date keeps its own lists
-- **Works offline** — all events/tasks work locally without Google Calendar connected
+- **Tasks sync via Google Tasks** — tasks persist across devices and browsers when signed in; falls back to `localStorage` offline
+- **Works offline** — all events/tasks work locally without Google connected
 
 ---
 
@@ -35,13 +35,15 @@ npx serve .
 
 Then open `http://localhost:8080` in your browser.
 
-### 2. Google Calendar (optional but recommended)
+### 2. Google Calendar & Tasks (optional but recommended)
 
-Without this step the app works fully for local task management and local events. To sync with Google Calendar:
+Without this step the app works fully for local task management and local events. To sync with Google Calendar and persist tasks across devices:
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project (or use an existing one)
-3. Navigate to **APIs & Services → Library** → search for **Google Calendar API** → Enable it
+3. Navigate to **APIs & Services → Library** and enable both:
+   - **Google Calendar API**
+   - **Google Tasks API**
 4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**
 5. Application type: **Web application**
 6. Add to **Authorised JavaScript origins**: `http://localhost:8080` (or your deployed URL)
