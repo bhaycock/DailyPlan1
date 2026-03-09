@@ -4,23 +4,23 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:           #f5f5f0;
+  --bg:           #f0f2f5;
   --surface:      #ffffff;
-  --border:       #d0cfc8;
-  --border-dark:  #a0a09a;
-  --text:         #222;
-  --text-muted:   #888;
-  --work-accent:  #4a90d9;
-  --life-accent:  #e8846a;
+  --border:       #e2e4e8;
+  --border-dark:  #b8b8b4;
+  --text:         #1a1a2e;
+  --text-muted:   #7a7a88;
+  --work-accent:  #2d7de8;
+  --life-accent:  #e8684a;
   --today-bg:     #fffbea;
-  --slot-hour:    #f9f9f7;
-  --slot-half:    #f3f3f0;
-  --slot-hover:   #e8f4ff;
+  --slot-hour:    #ffffff;
+  --slot-half:    #f7f8fa;
+  --slot-hover:   #e8f2ff;
   --header-h:     60px;
   --sidebar-w:    240px;
   --slot-h:       54px;    /* px per 30-min slot */
   --label-w:      52px;
-  --shadow:       0 2px 12px rgba(0,0,0,.10);
+  --shadow:       0 2px 16px rgba(0,0,0,.08);
 }
 
 html, body {
@@ -145,6 +145,13 @@ html, body {
 /* ============================================================
    MAIN LAYOUT
    ============================================================ */
+#app {
+  max-width: 1300px;
+  margin: 0 auto;
+  min-height: 100vh;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
 #main {
   display: flex;
   height: calc(100vh - var(--header-h));
@@ -167,8 +174,8 @@ html, body {
 }
 
 .goals-box {
-  border: 2px solid var(--border-dark);
-  border-radius: 10px;
+  border: 1.5px solid var(--border-dark);
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -177,13 +184,13 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 2px solid var(--border-dark);
+  border-bottom: 1.5px solid var(--border-dark);
   font-weight: 700;
   font-size: 14px;
 }
 
-#work-box .goals-header { background: #e8f3fc; }
-#life-box .goals-header { background: #fdf0ec; }
+#work-box .goals-header { background: #daeeff; }
+#life-box .goals-header { background: #fde2d8; }
 
 .goals-icon { font-size: 18px; }
 
@@ -330,7 +337,7 @@ html, body {
   position: absolute;
   left: 4px;
   right: 4px;
-  border-radius: 7px;
+  border-radius: 8px;
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 600;
@@ -338,13 +345,13 @@ html, body {
   overflow: hidden;
   cursor: grab;
   pointer-events: all;
-  box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  box-shadow: 0 2px 8px rgba(0,0,0,.20);
   transition: box-shadow .15s, opacity .15s;
   user-select: none;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-left: 4px solid rgba(0,0,0,.15);
+  border-left: 3px solid rgba(0,0,0,.18);
 }
 .event-card:hover {
   box-shadow: 0 4px 14px rgba(0,0,0,.28);
@@ -497,9 +504,78 @@ html, body {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (max-width: 600px) {
+
+/* --- Tablet (601px – 900px, any orientation) --- */
+@media (max-width: 900px) and (min-width: 601px) {
+  :root { --sidebar-w: 200px; --slot-h: 48px; }
+}
+
+/* --- Mobile landscape (≤ 900px landscape) --- */
+@media (max-width: 900px) and (orientation: landscape) {
   :root { --sidebar-w: 180px; --slot-h: 44px; --label-w: 44px; }
   #date-title { font-size: 15px; }
   #auth-label { display: none; }
   .auth-btn { padding: 6px 10px; }
+}
+
+/* --- Mobile portrait (≤ 600px portrait) --- */
+@media (max-width: 600px) and (orientation: portrait) {
+  :root { --slot-h: 44px; --label-w: 44px; }
+
+  /* Header */
+  #date-title { font-size: 15px; }
+  #auth-label { display: none; }
+  .auth-btn { padding: 6px 10px; }
+
+  /* Stack sidebar above timeline */
+  #main {
+    flex-direction: column;
+  }
+
+  /* Sidebar becomes a full-width horizontal strip */
+  #sidebar {
+    width: 100%;
+    min-width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1.5px solid var(--border);
+    padding: 6px 8px;
+    gap: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Each goals box takes half the width */
+  .goals-box {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .goals-header {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .goals-icon { font-size: 14px; }
+
+  .task-list { padding: 3px 0; }
+
+  .task-item {
+    min-height: 22px;
+    padding: 1px 4px;
+    gap: 3px;
+  }
+
+  /* Hide drag handles on touch — too small to be useful */
+  .task-drag-handle { display: none; }
+
+  .task-num { width: 12px; font-size: 10px; }
+  .task-input { font-size: 11px; }
+  .task-check { width: 14px; height: 14px; border-width: 1.5px; }
+
+  /* Timeline fills remaining height */
+  #timeline-wrapper {
+    flex: 1;
+    min-height: 0;
+  }
 }
