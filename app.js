@@ -18,7 +18,7 @@ const GOOGLE_CLIENT_ID = '340344849497-e65cr52t2udplgbe4mdc78r92vk1iopq.apps.goo
    CONFIG
    ============================================================ */
 const CFG = {
-  calendarId:      'primary',
+  calendarId:      'f0cd0468df7d2e0992aae7240b6a2dabbe4fa3beeabf3b544155d55e4d4b3a17@group.calendar.google.com',
   timelineStart:   8,      // 08:00
   timelineEnd:     22,     // 22:00
   slotHeightPx:    54,     // px per 30-min slot  (matches --slot-h in CSS)
