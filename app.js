@@ -12,7 +12,7 @@
    5. Paste the Client ID below.
 
    ============================================================ */
-const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '340344849497-e65cr52t2udplgbe4mdc78r92vk1iopq.apps.googleusercontent.com';
 
 /* ============================================================
    CONFIG
