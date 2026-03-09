@@ -5,7 +5,7 @@
    SETUP REQUIRED
    ──────────────
    1. Go to https://console.cloud.google.com/
-   2. Create a project → Enable "Google Calendar API"
+   2. Create a project → Enable "Google Calendar API" and "Tasks API"
    3. Create OAuth 2.0 credentials (Web application)
    4. Add your site URL (or http://localhost:PORT) to
       "Authorised JavaScript origins"
@@ -26,17 +26,23 @@ const CFG = {
   maxTasks:        6,
 };
 
+const TASKS_WORK_LIST_NAME = 'DailyPlan Work';
+const TASKS_LIFE_LIST_NAME = 'DailyPlan Life';
+
 /* ============================================================
    STATE
    ============================================================ */
-let currentDate   = new Date();
-let gapiReady     = false;
-let gisReady      = false;
-let tokenClient   = null;
-let isSignedIn    = false;
-let calEvents     = [];        // Google Calendar events for the day
-let localEvents   = [];        // local-only events (no Google auth)
-let dragState     = null;      // active drag context
+let currentDate     = new Date();
+let gapiReady       = false;
+let gisReady        = false;
+let tokenClient     = null;
+let isSignedIn      = false;
+let calEvents       = [];        // Google Calendar events for the day
+let localEvents     = [];        // local-only events (no Google auth)
+let dragState       = null;      // active drag context
+let workTaskListId  = null;      // Google Tasks list ID for Work tasks
+let lifeTaskListId  = null;      // Google Tasks list ID for Life tasks
+const _syncTimers   = {};        // debounce timers for Google Tasks sync
 
 /* ============================================================
    UTILITY
@@ -106,20 +112,184 @@ function randomId() {
 }
 
 /* ============================================================
-   LOCAL STORAGE — TASKS
+   TASK STORAGE — LOCAL STORAGE (fallback / cache)
    ============================================================ */
-function loadTasks(type) {
-  const key = `dailyplan_${type}_${dateKey(currentDate)}`;
+function loadTasksFromLocalStorage(type, dateStr) {
+  const key = `dailyplan_${type}_${dateStr}`;
   try {
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
   } catch (_) {}
-  return Array.from({ length: CFG.maxTasks }, () => ({ text: '', done: false, scheduled: false }));
+  return Array.from({ length: CFG.maxTasks }, () => ({ text: '', done: false, scheduled: false, googleId: null }));
 }
 
-function saveTasks(type, tasks) {
-  const key = `dailyplan_${type}_${dateKey(currentDate)}`;
-  localStorage.setItem(key, JSON.stringify(tasks));
+/* ============================================================
+   TASK STORAGE — GOOGLE TASKS API
+   ============================================================ */
+
+/** Find or create the two DailyPlan task lists after sign-in */
+async function ensureTaskLists() {
+  try {
+    const resp = await gapi.client.tasks.tasklists.list({ maxResults: 100 });
+    const lists = resp.result.items || [];
+
+    const workList = lists.find(l => l.title === TASKS_WORK_LIST_NAME);
+    const lifeList = lists.find(l => l.title === TASKS_LIFE_LIST_NAME);
+
+    if (workList) {
+      workTaskListId = workList.id;
+    } else {
+      const r = await gapi.client.tasks.tasklists.insert({ resource: { title: TASKS_WORK_LIST_NAME } });
+      workTaskListId = r.result.id;
+    }
+
+    if (lifeList) {
+      lifeTaskListId = lifeList.id;
+    } else {
+      const r = await gapi.client.tasks.tasklists.insert({ resource: { title: TASKS_LIFE_LIST_NAME } });
+      lifeTaskListId = r.result.id;
+    }
+  } catch (err) {
+    console.error('Error setting up task lists:', err);
+  }
+}
+
+/** Fetch tasks for a specific date from Google Tasks */
+async function loadTasksFromGoogle(type, dateStr) {
+  const listId = type === 'work' ? workTaskListId : lifeTaskListId;
+  if (!listId) return loadTasksFromLocalStorage(type, dateStr);
+
+  // Build date range: tasks due on dateStr (UTC date boundaries)
+  const dueMin = `${dateStr}T00:00:00.000Z`;
+  const nextDay = new Date(`${dateStr}T00:00:00.000Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const dueMax = nextDay.toISOString().replace(/\.\d{3}Z$/, '.000Z');
+
+  try {
+    const resp = await gapi.client.tasks.tasks.list({
+      tasklist:      listId,
+      dueMin,
+      dueMax,
+      showCompleted: true,
+      showHidden:    true,
+      maxResults:    20,
+    });
+
+    const googleTasks = (resp.result.items || []).sort((a, b) =>
+      (a.position || '').localeCompare(b.position || '')
+    );
+
+    // Build 6-slot array; tasks store their slot index in the notes field
+    const slots = Array.from({ length: CFG.maxTasks }, () => ({
+      text: '', done: false, scheduled: false, googleId: null,
+    }));
+
+    for (const gt of googleTasks) {
+      let slotIdx = -1;
+      let scheduled = false;
+      try {
+        const meta = JSON.parse(gt.notes || '{}');
+        if (typeof meta.slot === 'number' && meta.slot >= 0 && meta.slot < CFG.maxTasks) {
+          slotIdx = meta.slot;
+        }
+        scheduled = !!meta.scheduled;
+      } catch (_) {}
+
+      // Fallback: find first empty slot
+      if (slotIdx < 0 || slots[slotIdx].googleId !== null) {
+        slotIdx = slots.findIndex(s => s.googleId === null && s.text === '');
+      }
+      if (slotIdx < 0) break; // all slots filled
+
+      slots[slotIdx] = {
+        text:      gt.title || '',
+        done:      gt.status === 'completed',
+        scheduled,
+        googleId:  gt.id,
+      };
+    }
+
+    // Cache locally so offline / sign-out still shows last known state
+    localStorage.setItem(`dailyplan_${type}_${dateStr}`, JSON.stringify(slots));
+
+    return slots;
+  } catch (err) {
+    console.error('Error loading tasks from Google Tasks:', err);
+    return loadTasksFromLocalStorage(type, dateStr);
+  }
+}
+
+/** Sync a tasks array to Google Tasks (called debounced from saveTasks) */
+async function syncTasksToGoogle(type, tasks, dateStr) {
+  const listId = type === 'work' ? workTaskListId : lifeTaskListId;
+  if (!listId) return;
+
+  const due = `${dateStr}T00:00:00.000Z`;
+
+  for (let i = 0; i < tasks.length; i++) {
+    const task  = tasks[i];
+    const notes = JSON.stringify({ scheduled: task.scheduled, slot: i });
+
+    try {
+      if (task.text && task.googleId) {
+        // Update existing task
+        await gapi.client.tasks.tasks.patch({
+          tasklist: listId,
+          task:     task.googleId,
+          resource: {
+            title:  task.text,
+            status: task.done ? 'completed' : 'needsAction',
+            due,
+            notes,
+          },
+        });
+      } else if (task.text && !task.googleId) {
+        // Create new task
+        const resp = await gapi.client.tasks.tasks.insert({
+          tasklist: listId,
+          resource: {
+            title:  task.text,
+            status: task.done ? 'completed' : 'needsAction',
+            due,
+            notes,
+          },
+        });
+        task.googleId = resp.result.id;
+        // Update cache with new googleId
+        localStorage.setItem(`dailyplan_${type}_${dateStr}`, JSON.stringify(tasks));
+      } else if (!task.text && task.googleId) {
+        // Task was cleared — delete from Google Tasks
+        await gapi.client.tasks.tasks.delete({ tasklist: listId, task: task.googleId });
+        task.googleId = null;
+        localStorage.setItem(`dailyplan_${type}_${dateStr}`, JSON.stringify(tasks));
+      }
+    } catch (err) {
+      console.error(`Error syncing task slot ${i} (${type}):`, err);
+    }
+  }
+}
+
+/* ============================================================
+   TASK STORAGE — UNIFIED API
+   ============================================================ */
+async function loadTasks(type) {
+  const dateStr = dateKey(currentDate);
+  if (isSignedIn && workTaskListId && lifeTaskListId) {
+    return await loadTasksFromGoogle(type, dateStr);
+  }
+  return loadTasksFromLocalStorage(type, dateStr);
+}
+
+async function saveTasks(type, tasks) {
+  const dateStr = dateKey(currentDate);
+  // Always write to localStorage immediately (snappy UI, offline cache)
+  localStorage.setItem(`dailyplan_${type}_${dateStr}`, JSON.stringify(tasks));
+
+  if (!isSignedIn) return;
+
+  // Debounce Google Tasks sync so rapid keystrokes don't flood the API
+  clearTimeout(_syncTimers[type]);
+  _syncTimers[type] = setTimeout(() => syncTasksToGoogle(type, tasks, dateStr), 800);
 }
 
 /* ============================================================
@@ -309,9 +479,9 @@ function resolveOverlaps(events) {
 /* ============================================================
    TASK LIST — RENDER
    ============================================================ */
-function renderTasks(type) {
+async function renderTasks(type) {
   const el   = $(`${type}-tasks`);
-  const data = loadTasks(type);
+  const data = await loadTasks(type);
   el.innerHTML = '';
 
   data.forEach((task, i) => {
@@ -525,10 +695,10 @@ async function saveModalEvent() {
     await createEvent(title, start, end, selectedColor);
     if (pendingTaskRef) {
       // Mark that task as scheduled
-      const tasks = loadTasks(pendingTaskRef.type);
+      const tasks = await loadTasks(pendingTaskRef.type);
       tasks[pendingTaskRef.index].scheduled = true;
-      saveTasks(pendingTaskRef.type, tasks);
-      renderTasks(pendingTaskRef.type);
+      await saveTasks(pendingTaskRef.type, tasks);
+      await renderTasks(pendingTaskRef.type);
       pendingTaskRef = null;
     }
   } else if (modalMode === 'edit' && modalEditTarget) {
@@ -664,7 +834,10 @@ function onGapiLoad() {
   gapi.load('client', async () => {
     try {
       await gapi.client.init({});
-      await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
+      await Promise.all([
+        gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'),
+        gapi.client.load('https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest'),
+      ]);
     } catch (err) {
       console.warn('GAPI init warning:', err);
     }
@@ -680,13 +853,16 @@ function onGisLoad() {
   }
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope:     'https://www.googleapis.com/auth/calendar',
+    scope:     'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks',
     callback:  async (resp) => {
       if (resp.error) { console.error('Auth error', resp); return; }
       gapi.client.setToken(resp);
       isSignedIn = true;
       updateAuthBtn();
+      await ensureTaskLists();
       await refreshCalendarEvents();
+      await renderTasks('work');
+      await renderTasks('life');
       renderEvents();
     },
   });
@@ -712,7 +888,7 @@ function updateAuthBtn() {
   }
 }
 
-function handleAuthClick() {
+async function handleAuthClick() {
   if (!tokenClient) {
     alert('Google API not ready yet. Please wait a moment and try again.');
     return;
@@ -720,10 +896,14 @@ function handleAuthClick() {
   if (isSignedIn) {
     // Sign out
     gapi.client.setToken(null);
-    isSignedIn = false;
-    calEvents  = [];
+    isSignedIn     = false;
+    calEvents      = [];
+    workTaskListId = null;
+    lifeTaskListId = null;
     updateAuthBtn();
     renderEvents();
+    await renderTasks('work');
+    await renderTasks('life');
   } else {
     tokenClient.requestAccessToken({ prompt: '' });
   }
@@ -746,8 +926,8 @@ async function loadDay() {
   if (isSignedIn) {
     await refreshCalendarEvents();
   }
-  renderTasks('work');
-  renderTasks('life');
+  await renderTasks('work');
+  await renderTasks('life');
   renderEvents();
   scrollToWorkHours();
 }
