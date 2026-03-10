@@ -50,8 +50,12 @@ const _syncTimers   = {};        // debounce timers for Google Tasks sync
 const $ = id => document.getElementById(id);
 
 function dateKey(d) {
-  // "YYYY-MM-DD" for localStorage keys
-  return d.toISOString().slice(0, 10);
+  // "YYYY-MM-DD" using LOCAL date components (toISOString() would give UTC date
+  // which can be a different calendar day for non-UTC timezones)
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 function fmtDate(d) {
@@ -159,11 +163,10 @@ async function loadTasksFromGoogle(type, dateStr) {
   const listId = type === 'work' ? workTaskListId : lifeTaskListId;
   if (!listId) return loadTasksFromLocalStorage(type, dateStr);
 
-  // Build date range: tasks due on dateStr (UTC date boundaries)
+  // Build date range: full UTC day so we catch the noon-UTC due timestamp
+  // regardless of account timezone
   const dueMin = `${dateStr}T00:00:00.000Z`;
-  const nextDay = new Date(`${dateStr}T00:00:00.000Z`);
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  const dueMax = nextDay.toISOString().replace(/\.\d{3}Z$/, '.000Z');
+  const dueMax = `${dateStr}T23:59:59.999Z`;
 
   try {
     const resp = await gapi.client.tasks.tasks.list({
@@ -224,7 +227,9 @@ async function syncTasksToGoogle(type, tasks, dateStr) {
   const listId = type === 'work' ? workTaskListId : lifeTaskListId;
   if (!listId) return;
 
-  const due = `${dateStr}T00:00:00.000Z`;
+  // Store due at noon UTC so the correct calendar date is unambiguous
+  // for any Google account timezone (midnight UTC can shift to the wrong day)
+  const due = `${dateStr}T12:00:00.000Z`;
 
   for (let i = 0; i < tasks.length; i++) {
     const task  = tasks[i];
